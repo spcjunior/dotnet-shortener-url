@@ -1,0 +1,35 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]pp_[Dd]ata/
+
+## VS Code
+.vscode/
+.vs/
+
+## Rider
+.idea/
+
+## Docker
+.dockerignore
+
+## Database
+*.db
+*.db-shm
+*.db-wal
+
+## Logs
+*.log
+
+## Test Results
+TestResults/
