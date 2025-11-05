@@ -45,6 +45,9 @@ namespace UrlShortener.Api.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ShortCode")
+                        .IsUnique();
+
                     b.ToTable("urls", (string)null);
                 });
         }

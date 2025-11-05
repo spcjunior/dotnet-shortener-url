@@ -18,22 +18,25 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Url>(entity =>
         {
             entity.ToTable("urls");
-            
+
             entity.HasKey(e => e.Id);
-            
+
             entity.Property(e => e.Id)
                 .HasColumnName("id")
                 .ValueGeneratedOnAdd();
-            
+
             entity.Property(e => e.ShortCode)
                 .HasColumnName("short_code")
                 .HasMaxLength(10)
                 .IsRequired();
-            
+
+            entity.HasIndex(e => e.ShortCode)
+                .IsUnique();
+
             entity.Property(e => e.OriginalUrl)
                 .HasColumnName("original_url")
                 .IsRequired();
-            
+
             entity.Property(e => e.CreatedAt)
                 .HasColumnName("created_at")
                 .HasDefaultValueSql("NOW()");

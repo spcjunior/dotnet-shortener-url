@@ -27,6 +27,12 @@ namespace UrlShortener.Api.Migrations
                 {
                     table.PrimaryKey("PK_urls", x => x.id);
                 });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_urls_short_code",
+                table: "urls",
+                column: "short_code",
+                unique: true);
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

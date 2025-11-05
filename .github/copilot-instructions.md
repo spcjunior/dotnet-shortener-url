@@ -60,26 +60,29 @@ Implemente APENAS estes dois endpoints essenciais:
 
 ## Algoritmo de Geração de Short Codes
 
-A unicidade dos short codes é garantida através de um identificador numérico incremental do PostgreSQL:
+A unicidade dos short codes é garantida através de um identificador numérico incremental do PostgreSQL convertido para base62 usando **Hashids.net**.
 
 ### Passos do Algoritmo
 
 1. **Gerar ID**: Usar sequence do PostgreSQL iniciando em `916132832` (garante 6 caracteres em base62)
-2. **Converter para Base62**: Converter o ID para base62 usando caracteres `0-9a-zA-Z`
-3. **Ofuscar com Hash**: Aplicar XOR ou operação de hash no valor para evitar sequências previsíveis
-4. **Resultado**: Short code de 6 caracteres garantido, não sequencial, único
+2. **Converter e Ofuscar com Hashids.net**: Biblioteca que converte IDs em códigos ofuscados usando:
+   - Salt: `url-shortener-poc-secret-key`
+   - Alfabeto Base62: `0-9a-zA-Z`
+   - Comprimento mínimo: 6 caracteres
+3. **Resultado**: Short code de 6+ caracteres, não sequencial, único e reversível
 
 ### Exemplo de Implementação
 
 ```csharp
-// Configurar sequence no PostgreSQL
-CREATE SEQUENCE url_id_seq START WITH 916132832;
+// Usando Hashids.net (NuGet: HashidsNet)
+private static readonly Hashids _hashids = new Hashids(
+    salt: "url-shortener-poc-secret-key",
+    minHashLength: 6,
+    alphabet: "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+);
 
-// No código C#:
-// 1. Obter próximo ID da sequence
-// 2. Aplicar ofuscação: obfuscatedId = id XOR 0x5A5A5A5A (ou similar)
-// 3. Converter para base62
-// 4. Retornar short code de 6 caracteres
+public static string Generate(long id) => _hashids.EncodeLong(id);
+public static long Decode(string shortCode) => _hashids.DecodeLong(shortCode)[0];
 ```
 
 ### Alfabeto Base62
@@ -92,14 +95,22 @@ Tabela `urls` no PostgreSQL:
 
 ```sql
 CREATE TABLE urls (
-    id BIGSERIAL PRIMARY KEY,
-    short_code VARCHAR(10) UNIQUE NOT NULL,
+    id BIGSERIAL PRIMARY KEY DEFAULT nextval('url_id_seq'),
+    short_code VARCHAR(10) NOT NULL,
     original_url TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX idx_short_code ON urls(short_code);
+CREATE SEQUENCE url_id_seq START WITH 916132832;
+CREATE UNIQUE INDEX IX_urls_short_code ON urls(short_code);
 ```
+
+**IMPORTANTE**:
+
+- ✅ UNIQUE constraint em `short_code` garante integridade no banco de dados
+- ✅ PostgreSQL cria automaticamente um índice para a constraint UNIQUE
+- ✅ Busca otimizada: decode do shortCode → ID → busca por PRIMARY KEY
+- ✅ Índice único serve apenas como proteção de integridade, não para consultas
 
 Campos essenciais apenas. NÃO adicione campos de analytics, contadores ou metadados desnecessários.
 
@@ -112,8 +123,11 @@ Campos essenciais apenas. NÃO adicione campos de analytics, contadores ou metad
 - Validação básica de URL (formato válido, não vazio)
 - Async/await em operações de I/O
 - Logs com `ILogger` (built-in do .NET)
-- Tratamento de erros usando IExceptionHandler em dotnet
+- Tratamento de erros com try/catch nos endpoints
 - Testes unitários básicos com xUnit
+- **Hashids.net** para ofuscação de IDs (biblioteca NuGet)
+- **Extension Methods** para organização de endpoints
+- **Swagger/OpenAPI** para documentação interativa da API
 
 ### NÃO FAÇA (para esta POC)
 
@@ -126,6 +140,7 @@ Campos essenciais apenas. NÃO adicione campos de analytics, contadores ou metad
 - ❌ Repository pattern (use DbContext diretamente)
 - ❌ CQRS, MediatR ou arquiteturas complexas
 - ❌ Health checks elaborados
+- ❌ Índice secundário em `short_code` (busca por PRIMARY KEY após decode)
 - ❌ **Documentação (README, comentários extensos) antes de tudo funcionar e ser testado**
 
 ## Ordem de Execução (OBRIGATÓRIA)
@@ -156,28 +171,32 @@ dotnet run --project src/UrlShortener.Api
 dotnet test /p:CollectCoverage=true /p:CoverageReportsFormat=cobertura
 ```
 
-## Estrutura de Arquivos Sugerida
+## Estrutura de Arquivos Implementada
 
 ```
 src/
+  UrlShortener.sln            # Solution file
   UrlShortener.Api/
-    Program.cs              # Configuração da API e endpoints
-    appsettings.json        # Connection string do PostgreSQL
+    Program.cs                # Configuração da API
+    appsettings.json          # Connection string do PostgreSQL
+    Endpoints/
+      UrlEndpoints.cs         # Extension Methods com endpoints
     Models/
-      Url.cs                # Entity do EF Core
-      ShortenRequest.cs     # DTO de entrada
-      ShortenResponse.cs    # DTO de saída
+      Url.cs                  # Entity do EF Core
+      ShortenRequest.cs       # DTO de entrada
+      ShortenResponse.cs      # DTO de saída
     Services/
-      ShortCodeGenerator.cs # Lógica de conversão base62 + ofuscação
+      ShortCodeGenerator.cs   # Hashids.net para conversão
     Data/
-      AppDbContext.cs       # DbContext do EF Core
-tests/
+      AppDbContext.cs         # DbContext do EF Core
+    Migrations/
+      *_InitialCreate.cs      # Migration inicial
   UrlShortener.Tests/
     ShortCodeGeneratorTests.cs
-    UrlEndpointsTests.cs
-docker-compose.yml
 Dockerfile
+docker-compose.yml
 README.md
+ROADMAP.md
 ```
 
 ## Exemplo de Uso da API
@@ -228,8 +247,11 @@ Location: https://www.exemplo.com/pagina/muito/longa
 A POC está completa quando:
 
 - ✅ `docker-compose up` sobe API + PostgreSQL sem erros
-- ✅ POST /shorten retorna short code de 6 caracteres
+- ✅ POST /shorten retorna short code de 6+ caracteres
 - ✅ GET /{shortCode} redireciona corretamente (301)
-- ✅ Short codes são únicos e não sequenciais
-- ✅ Testes básicos passam
+- ✅ Short codes são únicos e não sequenciais (Hashids)
+- ✅ Busca otimizada por PRIMARY KEY (decode → ID → query)
+- ✅ Testes básicos passam (10 testes unitários)
+- ✅ Swagger UI acessível em `/swagger`
 - ✅ README documenta como usar
+- ✅ ROADMAP documenta próximos passos para produção
